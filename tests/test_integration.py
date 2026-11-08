@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -115,11 +115,19 @@ class CLIIntegrationTests(unittest.TestCase):
         return subprocess.run([sys.executable, '-m', 'smart_albums', *args], cwd=ROOT, env=self.env,
                               text=True, capture_output=True, timeout=15)
 
+    def assert_local_log_times(self, output):
+        entries = [json.loads(line) for line in output.splitlines()]
+        self.assertTrue(entries)
+        for entry in entries:
+            self.assertEqual(datetime.fromisoformat(entry['time']).utcoffset(), timedelta(hours=8))
+        return entries
+
     def test_preview_then_apply_then_idempotent_repeat(self):
         result = self.cli('once')
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(self.server.writes, [])
         self.assertIn('"matched": 2', result.stdout)
+        self.assert_local_log_times(result.stdout)
         self.cfg['dry_run'] = False
         self.save()
         result = self.cli('once')
@@ -140,6 +148,7 @@ class CLIIntegrationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertEqual(self.server.writes, [])
         self.assertIn('HTTP 403', result.stdout)
+        self.assert_local_log_times(result.stdout)
         self.assertNotIn(KEY, result.stdout + result.stderr)
 
     def test_check_and_help_do_not_require_key(self):
@@ -165,6 +174,12 @@ class CLIIntegrationTests(unittest.TestCase):
             stdout, stderr = proc.communicate(timeout=5)
             self.assertEqual(proc.returncode, 0, stdout + stderr)
             self.assertIn('scheduler_stopped', stdout)
+            entries = self.assert_local_log_times(stdout)
+            self.assertEqual(entries[0]['event'], 'scheduler_started')
+            self.assertEqual(entries[-1]['event'], 'scheduler_stopped')
+            for entry in entries:
+                if entry['event'] == 'next_run':
+                    self.assertEqual(datetime.fromisoformat(entry['at']).utcoffset(), timedelta(hours=8))
             self.assertNotIn(KEY, stdout + stderr)
             self.assertEqual(self.cli('healthcheck').returncode, 1)
         finally:

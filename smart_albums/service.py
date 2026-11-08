@@ -23,8 +23,9 @@ class AlreadyRunning(RuntimeError):
     pass
 
 
-def log(event, **fields):
-    print(json.dumps({"time": datetime.now(timezone.utc).isoformat(), "event": event, **fields},
+def log(event, *, tz=timezone.utc, **fields):
+    """Display event times in the configured zone; use UTC before config is valid."""
+    print(json.dumps({"time": datetime.now(tz).isoformat(), "event": event, **fields},
                      ensure_ascii=False), flush=True)
 
 
@@ -58,6 +59,7 @@ def run_lock(directory):
 
 
 def run_cycle(cfg, directory, force_dry_run=False, selected_job=None):
+    tz = ZoneInfo(cfg.get("timezone", "UTC"))
     with run_lock(directory):
         key = load_api_key(cfg)
         client = ImmichClient(cfg["server_url"], key, timeout=cfg["request_timeout"], max_pages=cfg["max_pages"])
@@ -67,7 +69,7 @@ def run_cycle(cfg, directory, force_dry_run=False, selected_job=None):
                 if not job["enabled"] or (selected_job and job["name"] != selected_job):
                     continue
                 dry_run = force_dry_run or cfg["dry_run"] or job.get("dry_run", False)
-                log("job_started", job=job["name"], dry_run=dry_run)
+                log("job_started", tz=tz, job=job["name"], dry_run=dry_run)
                 try:
                     result = run_job(client, job, dry_run=dry_run)
                 except APIError as exc:
@@ -78,7 +80,7 @@ def run_cycle(cfg, directory, force_dry_run=False, selected_job=None):
                               "error": "Unexpected job error; no automatic write retry"}
                 result["job"] = job["name"]
                 summary["jobs"].append(result)
-                log("job_finished", **result)
+                log("job_finished", tz=tz, **result)
                 if result["status"] != "ok":
                     summary["status"] = "failed"
         finally:
@@ -111,6 +113,7 @@ def healthcheck(directory):
 
 
 def serve(cfg, directory):
+    tz = ZoneInfo(cfg["timezone"])
     # Missing secrets should fail immediately rather than wait for the next cron tick.
     load_api_key(cfg)
     stop = threading.Event()
@@ -123,31 +126,30 @@ def serve(cfg, directory):
             try:
                 write_state(directory / "heartbeat.json", {"timestamp": time.time(), "pid": os.getpid()})
             except OSError:
-                log("heartbeat_failed", error="State directory is not writable")
+                log("heartbeat_failed", tz=tz, error="State directory is not writable")
                 stop.set()
                 return
             stop.wait(10)
 
     pulse = threading.Thread(target=heartbeat, daemon=True)
     pulse.start()
-    tz = ZoneInfo(cfg["timezone"])
 
     def cycle():
         try:
             run_cycle(cfg, directory)
         except AlreadyRunning:
-            log("run_skipped", reason="Another process holds run.lock")
+            log("run_skipped", tz=tz, reason="Another process holds run.lock")
         except (OSError, ConfigError):
-            log("run_failed", error="Cannot read secret or write state; stopping scheduler")
+            log("run_failed", tz=tz, error="Cannot read secret or write state; stopping scheduler")
             stop.set()
 
-    log("scheduler_started", timezone=cfg["timezone"], schedule=cfg["schedule"], dry_run=cfg["dry_run"])
+    log("scheduler_started", tz=tz, timezone=cfg["timezone"], schedule=cfg["schedule"], dry_run=cfg["dry_run"])
     try:
         if cfg["run_on_startup"]:
             cycle()
         while not stop.is_set():
             due = next_run(cfg["schedule"], datetime.now(tz))
-            log("next_run", at=due.isoformat())
+            log("next_run", tz=tz, at=due.isoformat())
             while not stop.is_set():
                 delay = due.timestamp() - time.time()
                 if delay <= 0:
@@ -165,5 +167,5 @@ def serve(cfg, directory):
             (directory / "heartbeat.json").unlink(missing_ok=True)
         except OSError:
             pass
-        log("scheduler_stopped")
+        log("scheduler_stopped", tz=tz)
     return 0

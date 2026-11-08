@@ -2,7 +2,9 @@
 import argparse
 import json
 import os
+from datetime import timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from . import __version__
 from .api import APIError, ImmichClient
@@ -21,10 +23,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == "healthcheck":
         return 0 if healthcheck(Path(os.getenv("SMART_ALBUMS_STATE_DIR", "/data"))) else 1
+    tz = timezone.utc
     try:
         cfg = load_config(args.config)
+        tz = ZoneInfo(cfg["timezone"])
         if args.command == "check":
-            log("config_valid", jobs=len(cfg["jobs"]), schedule=cfg["schedule"], timezone=cfg["timezone"],
+            log("config_valid", tz=tz, jobs=len(cfg["jobs"]), schedule=cfg["schedule"], timezone=cfg["timezone"],
                 dry_run=cfg["dry_run"])
             return 0
         if (args.job or args.dry_run) and args.command != "once":
@@ -46,13 +50,13 @@ def main(argv=None):
             return 0 if result["status"] == "ok" else 1
         return serve(cfg, directory)
     except (ConfigError, APIError, AlreadyRunning) as exc:
-        log("error", error=str(exc))
+        log("error", tz=tz, error=str(exc))
         return 2
     except OSError:
-        log("error", error="Cannot read configuration/secret or write state; check mounted paths and permissions")
+        log("error", tz=tz, error="Cannot read configuration/secret or write state; check mounted paths and permissions")
         return 2
     except Exception:
-        log("error", error="Unexpected service error; verify config and supported Immich version")
+        log("error", tz=tz, error="Unexpected service error; verify config and supported Immich version")
         return 2
 
 
