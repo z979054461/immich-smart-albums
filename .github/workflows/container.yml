@@ -119,3 +119,30 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: true
           sbom: true
+      - name: Pull and smoke-test the published amd64 image
+        env:
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${REPOSITORY,,}"
+          pinned="$image:sha-$COMMIT_SHA"
+          deploy="$image:${VERSION:-sha-$COMMIT_SHA}"
+          docker buildx imagetools inspect "$pinned"
+          docker pull --platform linux/amd64 "$pinned"
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges "$pinned" --version
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges "$pinned" --help
+          test "$(docker image inspect --format '{{.Config.User}}' "$pinned")" = '1000:1000'
+          # An archive lets the owner deploy without creating a registry token.
+          docker tag "$pinned" "$deploy"
+          docker save "$deploy" | gzip -1 > immich-smart-albums-linux-amd64.tar.gz
+      - name: Attach verified NAS image
+        uses: actions/upload-artifact@v4
+        with:
+          name: immich-smart-albums-linux-amd64
+          path: immich-smart-albums-linux-amd64.tar.gz
+          retention-days: 30
+          compression-level: 0
+          if-no-files-found: error
