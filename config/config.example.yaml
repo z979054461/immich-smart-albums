@@ -1,0 +1,58 @@
+# Copy to config/config.yaml. Never put API keys in this file or Git.
+server_url: http://192.168.1.100:2283
+api_key_file: /run/secrets/immich_api_key
+
+# Schedule uses this timezone, not the host machine's clock display.
+timezone: Asia/Shanghai
+schedule: "0 */6 * * *"
+run_on_startup: true
+# SAFE DEFAULT. Inspect matched counts, then set false and restart to write.
+dry_run: true
+request_timeout: 60
+max_pages: 10000
+
+jobs:
+  - name: family
+    # Create the target album in Immich first; exact name or UUID accepted.
+    album: 家人
+    max_matches: 100000
+    include:
+      # OR: any of these named faces. Duplicate names are rejected; use UUIDs.
+      people_any: [爸爸, 妈妈]
+    # Optional exclusion; remove this block if not needed.
+    # exclude:
+    #   people_any: [不加入此相册的人]
+
+  - name: together
+    enabled: false
+    album: 合照
+    include:
+      # AND: both faces must be present in the same asset.
+      people_all: [爸爸, 妈妈]
+      metadata_all:
+        - filter:
+            type: {eq: IMAGE}
+            takenAt: {gte: "2026-01-01T00:00:00+08:00"}
+
+  - name: travel
+    enabled: false
+    album: 旅行
+    include:
+      metadata_any:
+        - filter:
+            city: {eq: Shanghai}
+        - filter:
+            city: {eq: Hangzhou}
+      # Local filters examine search metadata, not original image bytes.
+      local_all:
+        - path: $.exifInfo.model
+          regex: iPhone
+
+  - name: dogs
+    enabled: false
+    album: 狗狗
+    include:
+      # Semantic search is a ranked top-N suggestion, not exhaustive recognition.
+      smart_any:
+        - query: a dog
+          limit: 200

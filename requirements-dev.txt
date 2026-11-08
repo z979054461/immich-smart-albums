@@ -1,0 +1,2 @@
+-r requirements-service.txt
+# Tests use the Python standard library unittest runner.

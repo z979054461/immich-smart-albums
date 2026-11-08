@@ -1,0 +1,9 @@
+# Explicit allowlist prevents local API keys, state and Git metadata entering builds.
+**
+!Dockerfile
+!requirements-service.txt
+!LICENSE
+!smart_albums/
+!smart_albums/**
+smart_albums/**/__pycache__/
+smart_albums/**/*.pyc

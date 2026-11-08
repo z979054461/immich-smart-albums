@@ -1,0 +1,44 @@
+services:
+  smart-albums:
+    build:
+      context: .
+    image: immich-smart-albums:local
+    restart: unless-stopped
+    init: true
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      SMART_ALBUMS_CONFIG: /config/config.yaml
+      SMART_ALBUMS_STATE_DIR: /data
+    volumes:
+      - type: bind
+        source: ./config/config.yaml
+        target: /config/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: volume
+        source: smart-albums-data
+        target: /data
+    secrets:
+      - immich_api_key
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # No inbound ports: this service only makes outbound Immich API requests.
+
+secrets:
+  immich_api_key:
+    file: ./config/api-key.txt
+
+volumes:
+  smart-albums-data:

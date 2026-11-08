@@ -6,3 +6,12 @@ __pycache__/
 *.pyc
 lib/__pycache__/
 lib/*.pyc
+
+# Local service configuration and secrets
+config/config.yaml
+config/api-key.txt
+.test-deps/
+__pycache__/
+*.pyc
+/data/
+.env

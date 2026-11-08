@@ -1,0 +1,14 @@
+# Service-only dependencies; upstream CLI requirements remain in requirements.txt.
+requests==2.32.5
+PyYAML==6.0.3
+croniter==6.0.0
+jsonpath-ng==1.7.0
+tzdata==2026.6
+# Pin transitive runtime dependencies for repeatable builds.
+certifi==2026.10.23
+charset-normalizer==3.5.2
+idna==3.20
+urllib3==2.8.0
+python-dateutil==4.0.0
+pytz==2026.6
+ply==3.11
